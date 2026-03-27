@@ -1,0 +1,178 @@
+using System.ComponentModel.DataAnnotations;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenApi();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+app.UseHttpsRedirection();
+
+// Lista em memória
+var produtos = new List<Produto>();
+
+// Função auxiliar para formatar erros
+IResult FormatarErro(IEnumerable<ValidationResult> results, int statusCode = 400)
+{
+    var primeiroErro = results.FirstOrDefault();
+    var mensagem = primeiroErro?.ErrorMessage ?? "Erro de validação.";
+    return Results.Json(new { sucesso = false, mensagem }, statusCode: statusCode);
+}
+
+// CREATE
+app.MapPost("/produtos", (Produto produto) =>
+{
+    var context = new ValidationContext(produto);
+    var results = new List<ValidationResult>();
+
+    if (!Validator.TryValidateObject(produto, context, results, true))
+    {
+        return FormatarErro(results);
+    }
+
+    produto.Id = produtos.Count > 0 ? produtos.Max(p => p.Id) + 1 : 1;
+    produtos.Add(produto);
+    return Results.Created($"/produtos/{produto.Id}", produto);
+});
+
+// READ ALL
+app.MapGet("/produtos", () => produtos);
+
+// READ BY ID
+app.MapGet("/produtos/{id}", (int id) =>
+{
+    var produto = produtos.FirstOrDefault(p => p.Id == id);
+    return produto is not null ? Results.Ok(produto) : Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+});
+
+// UPDATE
+app.MapPut("/produtos/{id}", (int id, Produto produtoAtualizado) =>
+{
+    var context = new ValidationContext(produtoAtualizado);
+    var results = new List<ValidationResult>();
+
+    if (!Validator.TryValidateObject(produtoAtualizado, context, results, true))
+    {
+        return FormatarErro(results);
+    }
+
+    var produto = produtos.FirstOrDefault(p => p.Id == id);
+    if (produto is null) return Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+
+    produto.Nome = produtoAtualizado.Nome;
+    produto.Preco = produtoAtualizado.Preco;
+
+    return Results.Ok(produto);
+});
+
+// DELETE
+app.MapDelete("/produtos/{id}", (int id) =>
+{
+    var produto = produtos.FirstOrDefault(p => p.Id == id);
+    if (produto is null) return Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+
+    produtos.Remove(produto);
+    return Results.Json(new { sucesso = true, mensagem = "Produto removido com sucesso." });
+});
+
+app.Run();
+
+record Produto
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "O nome é obrigatório.")]
+    [StringLength(5, ErrorMessage = "O nome deve ter no máximo 5 caracteres.")]
+    public string Nome { get; set; } = string.Empty;
+
+    [Range(0.01, 9999.99, ErrorMessage = "O preço deve estar entre 0.01 e 9999.99.")]
+    public decimal Preco { get; set; }
+}
+
+
+//novo
+// Endpoints/ProdutoEndpoints.cs
+using System.ComponentModel.DataAnnotations;
+
+public static class ProdutoEndpoints
+{
+    public static void MapProdutoEndpoints(this IEndpointRouteBuilder app)
+    {
+        var produtos = new List<Produto>();
+
+        app.MapPost("/produtos", (Produto produto) =>
+        {
+            var context = new ValidationContext(produto);
+            var results = new List<ValidationResult>();
+
+            if (!Validator.TryValidateObject(produto, context, results, true))
+            {
+                var primeiroErro = results.FirstOrDefault()?.ErrorMessage ?? "Erro de validação.";
+                return Results.Json(new { sucesso = false, mensagem = primeiroErro }, statusCode: 400);
+            }
+
+            produto.Id = produtos.Count > 0 ? produtos.Max(p => p.Id) + 1 : 1;
+            produtos.Add(produto);
+            return Results.Created($"/produtos/{produto.Id}", produto);
+        });
+
+        app.MapGet("/produtos", () => produtos);
+
+        app.MapGet("/produtos/{id}", (int id) =>
+        {
+            var produto = produtos.FirstOrDefault(p => p.Id == id);
+            return produto is not null
+                ? Results.Ok(produto)
+                : Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+        });
+
+        app.MapPut("/produtos/{id}", (int id, Produto produtoAtualizado) =>
+        {
+            var context = new ValidationContext(produtoAtualizado);
+            var results = new List<ValidationResult>();
+
+            if (!Validator.TryValidateObject(produtoAtualizado, context, results, true))
+            {
+                var primeiroErro = results.FirstOrDefault()?.ErrorMessage ?? "Erro de validação.";
+                return Results.Json(new { sucesso = false, mensagem = primeiroErro }, statusCode: 400);
+            }
+
+            var produto = produtos.FirstOrDefault(p => p.Id == id);
+            if (produto is null)
+                return Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+
+            produto.Nome = produtoAtualizado.Nome;
+            produto.Preco = produtoAtualizado.Preco;
+
+            return Results.Ok(produto);
+        });
+
+        app.MapDelete("/produtos/{id}", (int id) =>
+        {
+            var produto = produtos.FirstOrDefault(p => p.Id == id);
+            if (produto is null)
+                return Results.Json(new { sucesso = false, mensagem = "Produto não encontrado." }, statusCode: 404);
+
+            produtos.Remove(produto);
+            return Results.Json(new { sucesso = true, mensagem = "Produto removido com sucesso." });
+        });
+    }
+}
+
+// Modelo
+public record Produto
+{
+    public int Id { get; set; }
+
+    [Required(ErrorMessage = "O nome é obrigatório.")]
+    [StringLength(5, ErrorMessage = "O nome deve ter no máximo 5 caracteres.")]
+    public string Nome { get; set; } = string.Empty;
+
+    [Range(0.01, 9999.99, ErrorMessage = "O preço deve estar entre 0.01 e 9999.99.")]
+    public decimal Preco { get; set; }
+}
